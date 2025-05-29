@@ -1,57 +1,69 @@
-
 let selectedNumber = "";
 let conversations = {};
 
 async function loadConversations() {
-  const res = await fetch("https://twilio-whatsapp-backend.onrender.com/api/conversations");
-  const data = await res.json();
-  conversations = data;
+  try {
+    const res = await fetch("https://twilio-whatsapp-backend.onrender.com/api/conversations");
+    const data = await res.json();
+    conversations = data;
 
-  const list = document.getElementById("conversationList");
-  list.innerHTML = "";
+    const list = document.getElementById("conversationList");
+    list.innerHTML = "";
 
-  const sorted = Object.entries(data).sort((a, b) => {
-    const aTime = new Date(a[1][a[1].length - 1].timestamp).getTime();
-    const bTime = new Date(b[1][b[1].length - 1].timestamp).getTime();
-    return bTime - aTime;
-  });
+    const sorted = Object.entries(data).sort((a, b) => {
+      const aMsgs = a[1];
+      const bMsgs = b[1];
+      const aTime = new Date(aMsgs[aMsgs.length - 1].timestamp).getTime();
+      const bTime = new Date(bMsgs[bMsgs.length - 1].timestamp).getTime();
+      return bTime - aTime;
+    });
 
-  for (const [number, msgs] of sorted) {
-    const last = msgs[msgs.length - 1].message;
-    const unread = msgs.some(m => !m.read);
-    const div = document.createElement("div");
-    div.className = "conversation" + (unread ? " unread" : "");
-    div.innerText = number + ": " + last;
-    div.onclick = () => loadMessages(number);
-    list.appendChild(div);
+    for (const [number, msgs] of sorted) {
+      const last = msgs[msgs.length - 1]?.message || "";
+      const div = document.createElement("div");
+      div.className = "conversation" + (number === selectedNumber ? " selected" : "");
+      div.innerHTML = `<strong>${number}</strong><br/><small>${last}</small>`;
+      div.onclick = () => loadMessages(number);
+      list.appendChild(div);
+    }
+  } catch (err) {
+    console.error("Erreur de chargement des conversations", err);
   }
 }
 
 function loadMessages(number) {
   selectedNumber = number;
-  const msgs = conversations[number];
+  const msgs = conversations[number] || [];
   const box = document.getElementById("messages");
   box.innerHTML = "";
+
   msgs.forEach(msg => {
     const div = document.createElement("div");
-    div.className = "message" + (msg.sent ? " sent" : "");
-    div.innerText = msg.message;
+    div.className = "message " + (msg.sent ? "sent" : "received");
+    div.textContent = msg.message;
     box.appendChild(div);
   });
+
+  box.scrollTop = box.scrollHeight;
 }
 
 async function sendMessage() {
   const text = document.getElementById("messageInput").value;
   if (!text || !selectedNumber) return;
 
-  await fetch("https://twilio-whatsapp-backend.onrender.com/api/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to: selectedNumber, message: text })
-  });
+  try {
+    await fetch("https://twilio-whatsapp-backend.onrender.com/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: selectedNumber, message: text })
+    });
 
-  document.getElementById("messageInput").value = "";
-  loadConversations();
+    document.getElementById("messageInput").value = "";
+    await loadConversations();
+    loadMessages(selectedNumber);
+  } catch (err) {
+    console.error("Erreur envoi message", err);
+  }
 }
 
 loadConversations();
